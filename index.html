@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Modo Ambiente</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    color: #f5f5f5;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+  }
+  .bg-layer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    -webkit-transition: opacity 2.5s ease-in-out;
+    transition: opacity 2.5s ease-in-out;
+  }
+  .bg-layer.active { opacity: 1; }
+  .overlay {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    background: rgba(0,0,0,0.58);
+  }
+  .wrap {
+    position: relative;
+    z-index: 2;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .clock {
+    font-size: 16vw;
+    font-weight: 200;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: #ffffff;
+    text-shadow: 0 0 40px rgba(0,0,0,0.6);
+  }
+  .date {
+    font-size: 3.2vw;
+    font-weight: 300;
+    margin-top: 1.2vh;
+    color: #d8d8d8;
+    text-shadow: 0 0 20px rgba(0,0,0,0.6);
+  }
+  .rain-warning {
+    margin-top: 1.5vh;
+    font-size: 1.7vw;
+    color: #ffd27a;
+    text-shadow: 0 0 20px rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .rain-warning .alerta-icon {
+    width: 1.6em;
+    height: 1.6em;
+    margin-right: 0.6em;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .weather {
+    margin-top: 4.5vh;
+    display: flex;
+    align-items: center;
+    display: none;
+  }
+  .weather-icon {
+    font-size: 7vw;
+    line-height: 1;
+    margin-right: 2vw;
+  }
+  .weather-icon svg,
+  .forecast-icon svg {
+    width: 1em;
+    height: 1em;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .weather-info {
+    text-align: left;
+  }
+  .weather-temp {
+    font-size: 5vw;
+    font-weight: 300;
+    color: #ffffff;
+  }
+  .weather-desc {
+    font-size: 2vw;
+    color: #c8c8c8;
+    margin-top: 0.5vh;
+  }
+  .weather-loc {
+    font-size: 1.6vw;
+    color: #999;
+    margin-top: 2vh;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-shadow: 0 0 15px rgba(0,0,0,0.6);
+  }
+  .forecast {
+    margin-top: 3vh;
+    display: none;
+  }
+  .forecast-day {
+    text-align: center;
+    min-width: 6vw;
+    display: inline-block;
+    margin-left: 1.5vw;
+    margin-right: 1.5vw;
+  }
+  .forecast-day-name {
+    font-size: 1.4vw;
+    color: #aaa;
+    text-transform: capitalize;
+    margin-bottom: 0.5vh;
+  }
+  .forecast-icon {
+    font-size: 3.2vw;
+    line-height: 1;
+  }
+  .forecast-temps {
+    font-size: 1.3vw;
+    color: #ddd;
+    margin-top: 0.4vh;
+  }
+  .forecast-temps .max { color: #fff; }
+  .forecast-temps .min { color: #999; }
+  .footer {
+    position: fixed;
+    bottom: 3vh;
+    z-index: 2;
+    font-size: 1.3vw;
+    color: #666;
+    letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+  <div class="bg-layer" id="bgA"></div>
+  <div class="bg-layer" id="bgB"></div>
+  <div class="overlay"></div>
+
+  <div class="wrap">
+    <div class="clock" id="clock">--:--</div>
+    <div class="date" id="date">carregando data...</div>
+    <div class="rain-warning" id="rainWarning"></div>
+
+    <div class="weather" id="weather">
+      <div class="weather-icon" id="weatherIcon">⛅</div>
+      <div class="weather-info">
+        <div class="weather-temp" id="weatherTemp">--°C</div>
+        <div class="weather-desc" id="weatherDesc">carregando...</div>
+      </div>
+    </div>
+
+    <div class="forecast" id="forecast"></div>
+
+    <div class="weather-loc">Campo Grande / MS</div>
+  </div>
+  <div class="footer" id="footerStatus"></div>
+
+<script>
+const LAT = -20.4697;
+const LON = -54.6201;
+
+const diasSemana = ["domingo","segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira","sábado"];
+const diasSemanaAbrev = ["dom","seg","ter","qua","qui","sex","sáb"];
+const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+
+function pad(n) { return n.toString().padStart(2, "0"); }
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function atualizarRelogio() {
+  const agora = new Date();
+  document.getElementById("clock").textContent = pad(agora.getHours()) + ":" + pad(agora.getMinutes());
+  const diaSemana = cap(diasSemana[agora.getDay()]);
+  const dia = agora.getDate();
+  const mes = meses[agora.getMonth()];
+  document.getElementById("date").textContent = `${diaSemana}, ${dia} de ${mes}`;
+}
+
+// Ícones em SVG (só formas básicas: circle/ellipse/rect/line/polygon) —
+// o navegador do webOS não renderiza emoji, então evitamos texto/emoji aqui.
+const ICONES_SVG = {
+  sun: `<svg viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="13" fill="#FFD36E"/>
+    <g stroke="#FFD36E" stroke-width="4" stroke-linecap="round">
+      <line x1="32" y1="4" x2="32" y2="13"/>
+      <line x1="32" y1="51" x2="32" y2="60"/>
+      <line x1="4" y1="32" x2="13" y2="32"/>
+      <line x1="51" y1="32" x2="60" y2="32"/>
+      <line x1="13.5" y1="13.5" x2="19.5" y2="19.5"/>
+      <line x1="44.5" y1="44.5" x2="50.5" y2="50.5"/>
+      <line x1="13.5" y1="50.5" x2="19.5" y2="44.5"/>
+      <line x1="44.5" y1="19.5" x2="50.5" y2="13.5"/>
+    </g>
+  </svg>`,
+  cloud: `<svg viewBox="0 0 64 64">
+    <g fill="#E8EDF2">
+      <ellipse cx="24" cy="34" rx="13" ry="11"/>
+      <ellipse cx="38" cy="26" rx="15" ry="13"/>
+      <ellipse cx="50" cy="34" rx="12" ry="10"/>
+      <rect x="15" y="32" width="42" height="16" rx="8"/>
+    </g>
+  </svg>`,
+  partlyCloudy: `<svg viewBox="0 0 64 64">
+    <circle cx="42" cy="20" r="9" fill="#FFD36E"/>
+    <g stroke="#FFD36E" stroke-width="3" stroke-linecap="round">
+      <line x1="42" y1="4" x2="42" y2="9"/>
+      <line x1="58" y1="20" x2="53" y2="20"/>
+      <line x1="53.4" y1="9.4" x2="50" y2="12.8"/>
+    </g>
+    <g fill="#E8EDF2">
+      <ellipse cx="18" cy="40" rx="12" ry="10"/>
+      <ellipse cx="31" cy="33" rx="14" ry="12"/>
+      <ellipse cx="43" cy="40" rx="11" ry="9"/>
+      <rect x="10" y="38" width="40" height="15" rx="7.5"/>
+    </g>
+  </svg>`,
+  fog: `<svg viewBox="0 0 64 64">
+    <g stroke="#C9D4DE" stroke-width="5" stroke-linecap="round">
+      <line x1="8" y1="22" x2="56" y2="22"/>
+      <line x1="4" y1="34" x2="60" y2="34"/>
+      <line x1="10" y1="46" x2="54" y2="46"/>
+    </g>
+  </svg>`,
+  drizzle: `<svg viewBox="0 0 64 64">
+    <g fill="#C9D4DE">
+      <ellipse cx="24" cy="26" rx="13" ry="11"/>
+      <ellipse cx="38" cy="18" rx="15" ry="13"/>
+      <ellipse cx="50" cy="26" rx="12" ry="10"/>
+      <rect x="15" y="24" width="42" height="16" rx="8"/>
+    </g>
+    <g fill="#6FA8DC">
+      <circle cx="24" cy="50" r="2.6"/>
+      <circle cx="36" cy="52" r="2.6"/>
+      <circle cx="48" cy="50" r="2.6"/>
+    </g>
+  </svg>`,
+  rain: `<svg viewBox="0 0 64 64">
+    <g fill="#C9D4DE">
+      <ellipse cx="24" cy="26" rx="13" ry="11"/>
+      <ellipse cx="38" cy="18" rx="15" ry="13"/>
+      <ellipse cx="50" cy="26" rx="12" ry="10"/>
+      <rect x="15" y="24" width="42" height="16" rx="8"/>
+    </g>
+    <g stroke="#6FA8DC" stroke-width="3.5" stroke-linecap="round">
+      <line x1="24" y1="48" x2="20" y2="58"/>
+      <line x1="36" y1="48" x2="32" y2="58"/>
+      <line x1="48" y1="48" x2="44" y2="58"/>
+    </g>
+  </svg>`,
+  snow: `<svg viewBox="0 0 64 64">
+    <g fill="#C9D4DE">
+      <ellipse cx="24" cy="26" rx="13" ry="11"/>
+      <ellipse cx="38" cy="18" rx="15" ry="13"/>
+      <ellipse cx="50" cy="26" rx="12" ry="10"/>
+      <rect x="15" y="24" width="42" height="16" rx="8"/>
+    </g>
+    <g fill="#EAF2FA">
+      <circle cx="24" cy="50" r="2.8"/>
+      <circle cx="36" cy="54" r="2.8"/>
+      <circle cx="48" cy="50" r="2.8"/>
+    </g>
+  </svg>`,
+  thunderstorm: `<svg viewBox="0 0 64 64">
+    <g fill="#AEB9C4">
+      <ellipse cx="24" cy="24" rx="13" ry="11"/>
+      <ellipse cx="38" cy="16" rx="15" ry="13"/>
+      <ellipse cx="50" cy="24" rx="12" ry="10"/>
+      <rect x="15" y="22" width="42" height="16" rx="8"/>
+    </g>
+    <polygon points="36,36 26,52 33,52 29,62 45,42 37,42 41,36" fill="#FFD36E"/>
+  </svg>`,
+};
+
+const codigoParaInfo = {
+  0: { icon: "sun", desc: "Céu limpo" },
+  1: { icon: "partlyCloudy", desc: "Poucas nuvens" },
+  2: { icon: "partlyCloudy", desc: "Parcialmente nublado" },
+  3: { icon: "cloud", desc: "Nublado" },
+  45: { icon: "fog", desc: "Neblina" },
+  48: { icon: "fog", desc: "Neblina com geada" },
+  51: { icon: "drizzle", desc: "Garoa leve" },
+  53: { icon: "drizzle", desc: "Garoa" },
+  55: { icon: "drizzle", desc: "Garoa forte" },
+  56: { icon: "drizzle", desc: "Garoa congelante" },
+  57: { icon: "drizzle", desc: "Garoa congelante forte" },
+  61: { icon: "rain", desc: "Chuva leve" },
+  63: { icon: "rain", desc: "Chuva" },
+  65: { icon: "rain", desc: "Chuva forte" },
+  66: { icon: "rain", desc: "Chuva congelante" },
+  67: { icon: "rain", desc: "Chuva congelante forte" },
+  71: { icon: "snow", desc: "Neve leve" },
+  73: { icon: "snow", desc: "Neve" },
+  75: { icon: "snow", desc: "Neve forte" },
+  77: { icon: "snow", desc: "Grãos de neve" },
+  80: { icon: "rain", desc: "Pancadas de chuva leve" },
+  81: { icon: "rain", desc: "Pancadas de chuva" },
+  82: { icon: "thunderstorm", desc: "Pancadas de chuva forte" },
+  85: { icon: "snow", desc: "Pancadas de neve leve" },
+  86: { icon: "snow", desc: "Pancadas de neve forte" },
+  95: { icon: "thunderstorm", desc: "Trovoada" },
+  96: { icon: "thunderstorm", desc: "Trovoada com granizo leve" },
+  99: { icon: "thunderstorm", desc: "Trovoada com granizo forte" },
+};
+
+function svgIcone(codigo) {
+  const info = codigoParaInfo[codigo] || { icon: "cloud", desc: "—" };
+  return ICONES_SVG[info.icon] || ICONES_SVG.cloud;
+}
+
+const ICON_ALERTA = `<svg viewBox="0 0 64 64" class="alerta-icon">
+  <polygon points="32,6 60,56 4,56" fill="none" stroke="#ffd27a" stroke-width="4" stroke-linejoin="round"/>
+  <line x1="32" y1="24" x2="32" y2="40" stroke="#ffd27a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32" cy="48" r="2.6" fill="#ffd27a"/>
+</svg>`;
+
+async function atualizarClima() {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America%2FSao_Paulo&forecast_days=4`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    const temp = Math.round(data.current.temperature_2m);
+    const codigo = data.current.weather_code;
+    const infoAtual = codigoParaInfo[codigo] || { icon: "cloud", desc: "—" };
+
+    document.getElementById("weatherIcon").innerHTML = svgIcone(codigo);
+    document.getElementById("weatherTemp").textContent = `${temp}°C`;
+    document.getElementById("weatherDesc").textContent = infoAtual.desc;
+    document.getElementById("weather").style.display = "flex";
+
+    const chuvaHoje = data.daily.precipitation_probability_max[0];
+    const avisoEl = document.getElementById("rainWarning");
+    if (chuvaHoje !== undefined && chuvaHoje > 60) {
+      avisoEl.innerHTML = `${ICON_ALERTA} <span>Chance de chuva hoje: ${chuvaHoje}%</span>`;
+      avisoEl.style.display = "flex";
+    } else {
+      avisoEl.style.display = "none";
+    }
+
+    const forecastEl = document.getElementById("forecast");
+    forecastEl.innerHTML = "";
+    for (let i = 1; i <= 3 && i < data.daily.time.length; i++) {
+      const dataStr = data.daily.time[i];
+      const dataObj = new Date(dataStr + "T12:00:00");
+      const nomeDia = diasSemanaAbrev[dataObj.getDay()];
+      const ic = svgIcone(data.daily.weather_code[i]);
+      const max = Math.round(data.daily.temperature_2m_max[i]);
+      const min = Math.round(data.daily.temperature_2m_min[i]);
+      const card = document.createElement("div");
+      card.className = "forecast-day";
+      card.innerHTML = `
+        <div class="forecast-day-name">${nomeDia}</div>
+        <div class="forecast-icon">${ic}</div>
+        <div class="forecast-temps"><span class="max">${max}°</span> <span class="min">${min}°</span></div>
+      `;
+      forecastEl.appendChild(card);
+    }
+    forecastEl.style.display = "block";
+
+    document.getElementById("footerStatus").textContent = "";
+  } catch (e) {
+    document.getElementById("footerStatus").textContent = "Não foi possível obter a previsão do tempo";
+  }
+}
+
+// Slideshow de fotos de fundo
+let photos = [];
+let currentIndex = 0;
+let activeLayer = 0;
+const layers = [document.getElementById("bgA"), document.getElementById("bgB")];
+
+async function carregarFotos() {
+  try {
+    const resp = await fetch("fotos/manifest.json");
+    if (!resp.ok) return;
+    photos = await resp.json();
+    if (photos.length > 0) {
+      layers[0].style.backgroundImage = `url('fotos/${photos[0]}')`;
+      layers[0].classList.add("active");
+      currentIndex = 0;
+    }
+  } catch (e) {
+    // sem fotos disponíveis, mantém fundo preto
+  }
+}
+
+function proximaFoto() {
+  if (photos.length <= 1) return;
+  const nextIndex = (currentIndex + 1) % photos.length;
+  const nextLayerIdx = (activeLayer + 1) % 2;
+  const nextLayer = layers[nextLayerIdx];
+  const curLayer = layers[activeLayer];
+  nextLayer.style.backgroundImage = `url('fotos/${photos[nextIndex]}')`;
+  nextLayer.classList.add("active");
+  curLayer.classList.remove("active");
+  activeLayer = nextLayerIdx;
+  currentIndex = nextIndex;
+}
+
+// Controle central dos temporizadores: tudo para quando a página sai de
+// primeiro plano (o navegador do webOS não suspende isso sozinho sempre),
+// e volta a rodar quando a página fica visível de novo. Sem isso, o
+// relógio/clima/slideshow continuam consumindo CPU da TV mesmo se você
+// trocar de app pelo controle sem usar os atalhos (que fecham o navegador).
+let idRelogio = null;
+let idClima = null;
+let idFoto = null;
+
+function iniciarTemporizadores() {
+  if (idRelogio) return; // já rodando
+  atualizarRelogio();
+  idRelogio = setInterval(atualizarRelogio, 1000);
+  atualizarClima();
+  idClima = setInterval(atualizarClima, 10 * 60 * 1000);
+  idFoto = setInterval(proximaFoto, 30000);
+}
+
+function pararTemporizadores() {
+  clearInterval(idRelogio);
+  clearInterval(idClima);
+  clearInterval(idFoto);
+  idRelogio = idClima = idFoto = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    pararTemporizadores();
+  } else {
+    iniciarTemporizadores();
+  }
+});
+
+carregarFotos().then(iniciarTemporizadores);
+</script>
+</body>
+</html>
